@@ -47,7 +47,6 @@ async def pdf_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if sessions.get(chat_id) != "WAIT_PDF":
         return
 
-    # 🔒 PDF size limit (10MB)
     if update.message.document.file_size > 10 * 1024 * 1024:
         await update.message.reply_text("❌ PDF 10MB se chhoti bhejo")
         return
@@ -76,7 +75,7 @@ async def time_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Number >=10 bhejo")
         return
 
-    sessions[chat_id] = seconds
+    sessions[chat_id] = "RUNNING"
     await update.message.reply_text("🧠 Quiz ban raha hai...")
     await start_quiz(chat_id, seconds, context)
 
@@ -85,39 +84,61 @@ async def time_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def read_pdf():
     text = ""
     with pdfplumber.open(PDF_FILE) as pdf:
-        for page in pdf.pages[:5]:
+        for page in pdf.pages[:3]:
             text += page.extract_text() or ""
-    return text[:3000]
+    return text[:2500]
 
 def generate_questions(text):
     prompt = f"""
-Is text se 5 MCQ banao (Hindi).
-4 options ho.
-Correct answer ka index do (0-3).
-Sirf JSON return karo.
+Create 5 MCQ from the text below.
 
-Format:
+RULES:
+- Language: Hindi
+- 4 options each
+- answer index 0-3
+- ONLY valid JSON
+- No explanation
+- No markdown
+- No extra text
+
+FORMAT:
 [
- {{
-  "question": "",
-  "options": ["","","",""],
-  "answer": 0
- }}
+  {{
+    "question": "Question?",
+    "options": ["A","B","C","D"],
+    "answer": 0
+  }}
 ]
 
-Text:
+TEXT:
 {text}
 """
+
     res = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
+        model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.3
+        temperature=0
     )
-    return json.loads(res.choices[0].message.content)
+
+    raw = res.choices[0].message.content.strip()
+
+    # 🛡️ JSON SAFETY CLEAN
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+
+    start = raw.find("[")
+    end = raw.rfind("]") + 1
+    raw_json = raw[start:end]
+
+    return json.loads(raw_json)
 
 async def start_quiz(chat_id, seconds, context):
-    text = read_pdf()
-    questions = generate_questions(text)
+    try:
+        text = read_pdf()
+        questions = generate_questions(text)
+    except Exception as e:
+        await context.bot.send_message(chat_id, f"❌ Quiz error: {e}")
+        return
 
     for q in questions:
         await context.bot.send_poll(
@@ -132,6 +153,7 @@ async def start_quiz(chat_id, seconds, context):
         await asyncio.sleep(seconds + 2)
 
     await context.bot.send_message(chat_id, "🏁 Quiz khatam")
+
     sessions.pop(chat_id, None)
     if os.path.exists(PDF_FILE):
         os.remove(PDF_FILE)
@@ -140,11 +162,11 @@ async def start_quiz(chat_id, seconds, context):
 
 def main():
     app = (
-    ApplicationBuilder()
-    .token(BOT_TOKEN)
-    .connect_timeout(60)
-    .read_timeout(60)
-    .build()
+        ApplicationBuilder()
+        .token(BOT_TOKEN)
+        .connect_timeout(60)
+        .read_timeout(60)
+        .build()
     )
 
     app.add_handler(CommandHandler("start", start))
