@@ -94,9 +94,9 @@ Create 5 MCQ from the text below.
 
 RULES:
 - Language: Hindi
-- 4 options each
-- answer index 0-3
-- ONLY valid JSON
+- 4 options
+- Correct answer index (0-3)
+- RETURN ONLY JSON
 - No explanation
 - No markdown
 - No extra text
@@ -120,24 +120,35 @@ TEXT:
         temperature=0
     )
 
-    raw = res.choices[0].message.content.strip()
+    content = res.choices[0].message.content
 
-    # 🛡️ JSON SAFETY CLEAN
+    if not content or not content.strip():
+        raise ValueError("Empty AI response")
+
+    raw = content.strip()
+
     if raw.startswith("```"):
-        raw = raw.split("```")[1]
+        raw = raw.replace("```json", "").replace("```", "").strip()
 
     start = raw.find("[")
-    end = raw.rfind("]") + 1
-    raw_json = raw[start:end]
+    end = raw.rfind("]")
 
-    return json.loads(raw_json)
+    if start == -1 or end == -1:
+        raise ValueError("AI did not return JSON")
+
+    json_text = raw[start:end + 1]
+    return json.loads(json_text)
 
 async def start_quiz(chat_id, seconds, context):
     try:
         text = read_pdf()
         questions = generate_questions(text)
     except Exception as e:
-        await context.bot.send_message(chat_id, f"❌ Quiz error: {e}")
+        await context.bot.send_message(
+            chat_id,
+            f"❌ Quiz generate failed.\nReason: {e}"
+        )
+        sessions.pop(chat_id, None)
         return
 
     for q in questions:
