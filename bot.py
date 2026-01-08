@@ -132,7 +132,13 @@ async def start_quiz(chat_id, seconds, context):
 # ================= MAIN =================
 
 def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = (
+    ApplicationBuilder()
+    .token(BOT_TOKEN)
+    .connect_timeout(60)
+    .read_timeout(60)
+    .build()
+    )
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("pdf", pdf_cmd))
