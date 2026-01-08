@@ -47,6 +47,13 @@ async def pdf_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if sessions.get(chat_id) != "WAIT_PDF":
         return
 
+    # 🔒 PDF size limit (10MB)
+    if update.message.document.file_size > 10 * 1024 * 1024:
+        await update.message.reply_text("❌ PDF 10MB se chhoti bhejo")
+        return
+
+    await update.message.reply_text("📥 PDF mil gayi, download ho rahi hai...")
+
     file = await update.message.document.get_file()
     await file.download_to_drive(PDF_FILE)
 
